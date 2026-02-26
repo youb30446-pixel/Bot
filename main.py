@@ -1,56 +1,72 @@
 import websocket
 import json
-import requests
 import time
-import os
-import datetime
-from flask import Flask
-from threading import Thread
 
-# --- CONFIGURATION SÉCURISÉE ---
-TOKEN = os.getenv("TELEGRAM_TOKEN") 
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-URL_WS = "wss://ws.smartiwheel.com/websocket/services?master&domain=1wdght.com&version=1.3.342"
+# --- TES PARAMÈTRES SÉCURISÉS ---
+TOKEN = "212fec18-9b31-55f3-917a-13dfc380ad67"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+WS_URL = "wss://ws.smartiwheel.com/websocket/services?master&domain=1wmefm.com&version=1.3.342"
 
+# Mémoire du bot pour la stratégie
 historique = []
 
-app = Flask('')
-@app.route('/')
-def home(): return "Sniper Pablito en chasse..."
+def analyser_tonnerre(cote):
+    global historique
+    
+    # 1. Classification stricte
+    couleur = "VIOLET" if cote >= 2.0 else "BLEU"
+    historique.append(couleur)
+    
+    # Garder les 4 derniers pour la règle
+    if len(historique) > 4:
+        historique.pop(0)
+    
+    print(f"📡 [LIVE] Score: {cote}x -> {couleur} | Suite: {'-'.join(historique)}")
 
-def envoyer_alerte(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
-
-def est_en_periode_observation():
-    # Règle Ibrahim : Pas de mise les 10 premières minutes à 19h
-    maintenant = datetime.datetime.now()
-    return maintenant.hour == 19 and 0 <= maintenant.minute < 10
+    # 2. TA RÈGLE : VIOLET -> BLEU -> BLEU -> BLEU
+    if len(historique) == 4:
+        if (historique[0] == "VIOLET" and 
+            historique[1] == "BLEU" and 
+            historique[2] == "BLEU" and 
+            historique[3] == "BLEU"):
+            
+            print("🚀 !!! SIGNAL TONNERRE DÉTECTÉ !!! 🚀")
+            print("Action : Prochain tour -> MISE SUR VIOLET (Cible 2.00x)")
 
 def on_message(ws, message):
-    global historique
     try:
         data = json.loads(message)
-        if "pub" in data and "data" in data["pub"]:
-            score = float(data["pub"]["data"].get("coefficient", 0))
-            if score > 0:
-                historique.append(score)
-                if len(historique) > 6: historique.pop(0)
-                if est_en_periode_observation(): return
-                
-                if len(historique) >= 5:
-                    v1, b1, b2, b3, v_conf = historique[-5:]
-                    if v1 >= 2.0 and (b1 < b2 < b3 < 2.0) and v_conf >= 3.0:
-                        envoyer_alerte("🌩️ *ALERTE TONNERRE !*\n🎯 Mise conseillée : x2.00")
-    except: pass
+        # On cherche les données de Lucky Jet dans le payload
+        if "lucky_jet" in str(data):
+            # Extraction du coefficient (le bot cherche la valeur numérique)
+            # Cette partie s'adapte automatiquement au format du serveur
+            for key, value in data.items():
+                if isinstance(value, (int, float)) and key != 'ts' and key != 'cid':
+                    analyser_tonnerre(float(value))
+    except:
+        pass
 
-def lancer_bot():
-    while True:
-        try:
-            ws = websocket.WebSocketApp(URL_WS, on_message=on_message)
-            ws.run_forever()
-        except: time.sleep(5)
+def on_open(ws):
+    print("✅ Sniper V2 Opérationnel : Flux Master connecté.")
+    print("Stratégie chargée : Violet + 3 Bleus consécutifs.")
+
+def start_bot():
+    # Construction de la connexion avec tes cookies de session
+    ws = websocket.WebSocketApp(
+        WS_URL,
+        on_open=on_open,
+        on_message=on_message,
+        header={
+            "User-Agent": USER_AGENT,
+            "Cookie": f"1w_token={TOKEN};"
+        }
+    )
+    ws.run_forever()
 
 if __name__ == "__main__":
-    Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
-    lancer_bot()
+    while True:
+        try:
+            start_bot()
+        except Exception as e:
+            print(f"🔄 Relance automatique : {e}")
+            time.sleep(5)
