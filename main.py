@@ -13,33 +13,39 @@ historique = []
 def analyser_tonnerre(cote):
     global historique
     
-    # 1. Classification stricte
-    couleur = "VIOLET" if cote >= 2.0 else "BLEU"
-    historique.append(couleur)
+    # On stocke la cote numérique pour vérifier la montée
+    historique.append(cote)
     
-    # Garder les 4 derniers pour la règle
-    if len(historique) > 4:
+    # On garde les 5 derniers scores pour la règle : V -> B1 < B2 < B3 -> V_conf
+    if len(historique) > 5:
         historique.pop(0)
     
-    print(f"📡 [LIVE] Score: {cote}x -> {couleur} | Suite: {'-'.join(historique)}")
+    print(f"📡 [LIVE] Score: {cote}x | Historique: {historique}")
 
-    # 2. TA RÈGLE : VIOLET -> BLEU -> BLEU -> BLEU
-    if len(historique) == 4:
-        if (historique[0] == "VIOLET" and 
-            historique[1] == "BLEU" and 
-            historique[2] == "BLEU" and 
-            historique[3] == "BLEU"):
+    # --- TA STRATÉGIE MASTER ---
+    if len(historique) == 5:
+        v1 = historique[0]     # Premier Violet
+        b1 = historique[1]     # Bleu 1
+        b2 = historique[2]     # Bleu 2
+        b3 = historique[3]     # Bleu 3
+        v_conf = historique[4] # Violet de Confirmation
+
+        # Vérification stricte :
+        # 1. v1 est violet (>= 2.0)
+        # 2. b1, b2, b3 sont bleus ET montent (b1 < b2 < b3 < 2.0)
+        # 3. v_conf est violet de confirmation (>= 3.0)
+        if (v1 >= 2.0 and 
+            (b1 < b2 < b3 < 2.0) and 
+            v_conf >= 3.0):
             
             print("🚀 !!! SIGNAL TONNERRE DÉTECTÉ !!! 🚀")
+            print(f"Séquence validée : {v1} -> {b1} < {b2} < {b3} -> {v_conf}")
             print("Action : Prochain tour -> MISE SUR VIOLET (Cible 2.00x)")
 
 def on_message(ws, message):
     try:
         data = json.loads(message)
-        # On cherche les données de Lucky Jet dans le payload
         if "lucky_jet" in str(data):
-            # Extraction du coefficient (le bot cherche la valeur numérique)
-            # Cette partie s'adapte automatiquement au format du serveur
             for key, value in data.items():
                 if isinstance(value, (int, float)) and key != 'ts' and key != 'cid':
                     analyser_tonnerre(float(value))
@@ -48,10 +54,9 @@ def on_message(ws, message):
 
 def on_open(ws):
     print("✅ Sniper V2 Opérationnel : Flux Master connecté.")
-    print("Stratégie chargée : Violet + 3 Bleus consécutifs.")
+    print("Stratégie chargée : V -> B montants -> V de confirmation (3.0+).")
 
 def start_bot():
-    # Construction de la connexion avec tes cookies de session
     ws = websocket.WebSocketApp(
         WS_URL,
         on_open=on_open,
