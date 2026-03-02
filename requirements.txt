@@ -1,4 +1,2 @@
 websocket-client
 requests
-flask
-gunicorn
